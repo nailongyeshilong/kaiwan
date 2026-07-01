@@ -9,6 +9,7 @@ import 'package:kaiplay/features/game_library/presentation/providers/game_librar
 import 'package:kaiplay/features/history/domain/entities/history_overview.dart';
 import 'package:kaiplay/features/history/domain/repositories/history_repository.dart';
 import 'package:kaiplay/features/history/presentation/providers/history_view_model.dart';
+import 'package:kaiplay/features/home/domain/entities/home_draw_result.dart';
 import 'package:kaiplay/features/home/domain/entities/home_overview.dart';
 import 'package:kaiplay/features/home/domain/repositories/home_repository.dart';
 import 'package:kaiplay/features/home/presentation/providers/home_view_model.dart';
@@ -52,11 +53,20 @@ class _FakeHomeRepository implements HomeRepository {
     return const HomeOverview(
       featuredTitle: '今日尚未抽取',
       featuredDescription: '测试环境首页概览。',
+      featuredCoverImagePath: null,
       remainingDraws: 3,
       maxDraws: 3,
       gamePoolCount: 0,
       isLocked: false,
+      hasResult: false,
       footerHint: '最多每日 3 次抽取，第 3 次后锁定今日结果。',
+    );
+  }
+
+  @override
+  Future<HomeDrawResult> drawGame() async {
+    return const HomeDrawResult.emptyPool(
+      message: '当前卡池为空，请先添加游戏。',
     );
   }
 

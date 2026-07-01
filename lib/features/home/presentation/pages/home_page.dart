@@ -7,6 +7,7 @@ import '../../../../app/router/app_destination.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../shared/widgets/app_surface_card.dart';
+import '../../domain/entities/home_draw_result.dart';
 import '../providers/home_view_model.dart';
 import '../widgets/home_hero_card.dart';
 import '../widgets/home_stat_card.dart';
@@ -56,6 +57,10 @@ class HomePage extends ConsumerWidget {
                   HomeHeroCard(
                     title: data.featuredTitle,
                     description: data.featuredDescription,
+                    coverImagePath: data.featuredCoverImagePath,
+                    hasResult: data.hasResult,
+                    isDrawing: data.isDrawing,
+                    resultVersion: data.resultVersion,
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   Wrap(
@@ -80,10 +85,18 @@ class HomePage extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.xl),
-                  FilledButton(
-                    onPressed: () =>
-                        _handleDrawAction(context, data.gamePoolCount),
-                    child: const Text('开玩'),
+                  FilledButton.icon(
+                    onPressed: data.isDrawing
+                        ? null
+                        : () => _handleDrawAction(context, ref),
+                    icon: data.isDrawing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.casino_outlined),
+                    label: Text(data.isDrawing ? '抽取中...' : '开玩'),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   AppSurfaceCard(
@@ -114,17 +127,28 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  void _handleDrawAction(BuildContext context, int gamePoolCount) {
-    if (gamePoolCount == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前卡池为空，请先添加游戏。')),
-      );
-      context.go(AppDestination.gameLibrary.path);
-      return;
-    }
+  Future<void> _handleDrawAction(BuildContext context, WidgetRef ref) async {
+    try {
+      final drawResult =
+          await ref.read(homeViewModelProvider.notifier).drawGame();
+      if (!context.mounted) {
+        return;
+      }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('抽取流程将在后续步骤接入。')),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(drawResult.message)),
+      );
+
+      if (drawResult.type == HomeDrawResultType.emptyPool) {
+        context.go(AppDestination.gameLibrary.path);
+      }
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('抽取失败：$error')),
+      );
+    }
   }
 }

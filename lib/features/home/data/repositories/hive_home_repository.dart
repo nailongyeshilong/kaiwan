@@ -1,15 +1,24 @@
 import 'dart:async';
 
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/repositories/app_local_repository.dart';
+import '../../../../core/utils/app_id_generator.dart';
 import '../../../../shared/models/daily_draw_state.dart';
 import '../../../../shared/models/game.dart';
+import '../../../../shared/models/play_history.dart';
+import '../services/home_game_picker.dart';
+import '../../domain/entities/home_draw_result.dart';
 import '../../domain/entities/home_overview.dart';
 import '../../domain/repositories/home_repository.dart';
 
 class HiveHomeRepository implements HomeRepository {
-  const HiveHomeRepository(this._localRepository);
+  const HiveHomeRepository(
+    this._localRepository,
+    this._gamePicker,
+  );
 
   final AppLocalRepository _localRepository;
+  final HomeGamePicker _gamePicker;
 
   @override
   Stream<HomeOverview> watchOverview() {
@@ -55,11 +64,68 @@ class HiveHomeRepository implements HomeRepository {
         games: games,
         dailyDrawState: dailyDrawState,
       ),
+      featuredCoverImagePath:
+          dailyDrawState.recommendedGameCoverImagePathSnapshot,
       remainingDraws: dailyDrawState.remainingDrawCount,
-      maxDraws: 3,
+      maxDraws: AppConstants.maxDailyDrawCount,
       gamePoolCount: games.length,
       isLocked: dailyDrawState.isLocked,
+      hasResult: dailyDrawState.hasResult,
       footerHint: '最多每日 3 次抽取，第 3 次后锁定今日结果。',
+    );
+  }
+
+  @override
+  Future<HomeDrawResult> drawGame() async {
+    final games = await _localRepository.getGames();
+    if (games.isEmpty) {
+      return const HomeDrawResult.emptyPool(
+        message: '当前卡池为空，请先添加游戏。',
+      );
+    }
+
+    final dailyDrawState = await getTodayDrawState();
+    if (dailyDrawState.isLocked || dailyDrawState.remainingDrawCount <= 0) {
+      return const HomeDrawResult.locked(
+        message: '今日抽取次数已用完，请明天再来。',
+      );
+    }
+
+    final pickedGame = _gamePicker.pick(games);
+    final drawnAt = DateTime.now();
+    final remainingDraws = dailyDrawState.remainingDrawCount - 1;
+    final isLocked = remainingDraws <= 0;
+
+    final updatedDailyDrawState = dailyDrawState.copyWith(
+      remainingDrawCount: remainingDraws,
+      isLocked: isLocked,
+      recommendedGameId: pickedGame.id,
+      recommendedGameNameSnapshot: pickedGame.name,
+      recommendedGameCoverImagePathSnapshot: pickedGame.coverImagePath,
+      lastDrawAt: drawnAt,
+    );
+
+    await saveDailyDrawState(updatedDailyDrawState);
+
+    if (isLocked) {
+      await _localRepository.savePlayHistory(
+        PlayHistory(
+          id: AppIdGenerator.newPlayHistoryId(),
+          dateKey: updatedDailyDrawState.dateKey,
+          gameId: pickedGame.id,
+          gameNameSnapshot: pickedGame.name,
+          gameCoverImagePathSnapshot: pickedGame.coverImagePath,
+          drawnAt: drawnAt,
+        ),
+      );
+
+      return HomeDrawResult.success(
+        message: '今日最终结果已锁定：${pickedGame.name}',
+      );
+    }
+
+    return HomeDrawResult.success(
+      message: '抽取完成：${pickedGame.name}',
     );
   }
 
@@ -85,6 +151,6 @@ class HiveHomeRepository implements HomeRepository {
       return '当前卡池为空，请先前往游戏库添加至少 1 个游戏。';
     }
 
-    return '本地数据层已接通，后续抽取结果会在这里持久化展示。';
+    return '今天还有 3 次机会，点击“开玩”开始抽取今日游戏。';
   }
 }
